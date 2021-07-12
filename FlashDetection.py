@@ -45,7 +45,7 @@ class POI(Process):  ####################################new point of interest
         # self.result_available = threading.Event()
 
     def kill_process(self):
-        print("time of message transmition",round(time.time()-self.time_of_message,3))
+        print("pid-" , self.pid ,"time of message transmition",round(time.time()-self.time_of_message,3))
         self.qOUT.put(("kill" , self.loc))
         print("pid-" , self.pid ,"send kill request")
 
@@ -151,6 +151,7 @@ class POI(Process):  ####################################new point of interest
                 if(message=='01111111'):
 
                     self.EOF=True
+                    print()
                     break
                 else:
                     char = EncoderDecoder.binary_toText(message)
@@ -249,9 +250,11 @@ class POI(Process):  ####################################new point of interest
                     while(self.EOF==False):
                         final_mess= final_mess+ self.get_message()
                         self.get_some_shit_out()
-                    if self.EOF==False:
+
+                    if self.EOF==True:
                         print()
-                        print(final_mess)
+                        print("pid-" , self.pid , "message : ",final_mess)
+
                     signal_etablished = False
                     self.kill_process()
                 pass
