@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import multiprocessing.queues
 from multiprocessing import Process
-from datetime import datetime,timedelta
+from datetime import datetime
 import EncoderDecoder
 import time
 
@@ -78,6 +78,7 @@ class POI(Process):  ####################################new point of interest
         # print("1010000100110111101100001011110100010000001101001011100110010000001110100011010000110010100100000011010110110100101101110011001110010000110000000000")
         start = datetime.now()
         error = 0
+        timeEOF =time.time()
         while True:
 
             if started==False:
@@ -91,7 +92,9 @@ class POI(Process):  ####################################new point of interest
                 frame = tupleQueue[0]
 
                 timee = tupleQueue[1]
-
+                if (time.time()-timeEOF>6):
+                    self.EOF = True
+                    break
 
             else:
 
@@ -132,21 +135,21 @@ class POI(Process):  ####################################new point of interest
                     message = message + "1"
                     print("1" , end='')
                     # started = True
-                    lastDigits[digitscount] = 1
-                    digitscount = (digitscount + 1) % 10
+                    # lastDigits[digitscount] = 1
+                    # digitscount = (digitscount + 1) % 10
                     start = timee
             else:
                 self.maxl = (50 , 50)
                 if started == True:
                     message = message + "0"
                     print("0" , end='')
-                    lastDigits[digitscount] = 0
-                    digitscount = (digitscount + 1) % 10
+                    # lastDigits[digitscount] = 0
+                    # digitscount = (digitscount + 1) % 10
                     start = timee
             self.tracking()
             if len(message)==8:
                 if(message=='01111111'):
-                    EOF=True
+
                     self.EOF=True
                     break
                 else:
@@ -159,9 +162,7 @@ class POI(Process):  ####################################new point of interest
             if countofchar==packagesize:
 
                 break
-            if(EOF==True):
-                print()
-                print(final_message)
+
 
             # cv2.circle(frame , maxLoc , 50 , (0 , 0 , 255) , 2 , cv2.LINE_AA)
             # cv2.imshow('flash' , frame)
@@ -171,9 +172,9 @@ class POI(Process):  ####################################new point of interest
         return final_message
 
 
-    def get_some_shit_out(self,sec):
+    def get_some_shit_out(self):
         maxVal=1
-        print("empty")
+
         while (maxVal!=0):
             try:
                 tupleQueue = self.qIN.get()
@@ -201,7 +202,6 @@ class POI(Process):  ####################################new point of interest
 
         lowBoundON = onExpected - expectedError
         lowBoundOFF = offExpected - expectedError
-
         highBoundON = onExpected + expectedError
         highBoundOFF = offExpected + expectedError
 
@@ -245,10 +245,12 @@ class POI(Process):  ####################################new point of interest
                 if signal_etablished == True:
                     print("pid-" , self.pid , "first signal lost")
                     print("pid-" , self.pid , "onAVG-" , avgON , "offAVG-" , avgOFF)
-                    self.time_of_message = time.time();
+                    self.time_of_message = time.time()
                     while(self.EOF==False):
                         final_mess= final_mess+ self.get_message()
-                        self.get_some_shit_out(0.5)
+                        self.get_some_shit_out()
+                    if self.EOF==False:
+                        print()
                         print(final_mess)
                     signal_etablished = False
                     self.kill_process()
