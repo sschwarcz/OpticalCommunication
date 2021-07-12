@@ -2,8 +2,9 @@ import cv2
 import numpy as np
 import multiprocessing.queues
 from multiprocessing import Process
-from datetime import datetime
+from datetime import datetime,timedelta
 import EncoderDecoder
+import time
 
 locArr = []
 processing = []
@@ -15,15 +16,16 @@ def getAllValues():
     authorizedThreads = 1
     lifetime_of_thread = 10
 
-    onExpected_first_signal = 0.063
-    offExpected_first_signal = 0.2578
+    # onExpected_first_signal = 0.1292
+    # offExpected_first_signal = 0.0697
+    onExpected_first_signal = 0.1277
+    offExpected_first_signal =  0.072
     expectedError_first_signal = 0.03
 
-    time_for_frame_message = 0.5
+    time_for_frame_message = 0.3
+    package_size=1
 
-    return authorizedThreads,lifetime_of_thread ,onExpected_first_signal,offExpected_first_signal ,expectedError_first_signal,time_for_frame_message
-
-
+    return authorizedThreads,lifetime_of_thread ,onExpected_first_signal,offExpected_first_signal ,expectedError_first_signal,time_for_frame_message,package_size
 
 
 
@@ -38,9 +40,12 @@ class POI(Process):  ####################################new point of interest
         self.qOUT = queueO
         self.signalOn = [0] * 10
         self.signalOff = [0] * 10
+        self.EOF=False
+        self.time_of_message=None
         # self.result_available = threading.Event()
 
     def kill_process(self):
+        print("time of message transmition",round(time.time()-self.time_of_message,3))
         self.qOUT.put(("kill" , self.loc))
         print("pid-" , self.pid ,"send kill request")
 
@@ -58,17 +63,25 @@ class POI(Process):  ####################################new point of interest
         pass
 
     def get_message(self):
-        _,_,_,_,_,time_sleep=getAllValues()
-        start = datetime.now()
+
+        _,_,_,_,_,time_sleep , packagesize=getAllValues()
+
+        final_message=""
         message = ""
         started = False
+        firstdigit=False
+        EOF=False
+        countofchar=0
         lastDigits=[1]*10
         digitscount=0
         print("pid-" , self.pid , "waiting for message")
-
+        # print("1010000100110111101100001011110100010000001101001011100110010000001110100011010000110010100100000011010110110100101101110011001110010000110000000000")
+        start = datetime.now()
+        error = 0
         while True:
 
             if started==False:
+                # print("entered get message")
                 # print("start == false")
                 try:
                     tupleQueue = self.qIN.get()
@@ -76,25 +89,30 @@ class POI(Process):  ####################################new point of interest
                     print("pid-" , self.pid , "error")
 
                 frame = tupleQueue[0]
+
                 timee = tupleQueue[1]
 
 
             else:
-                while time_sleep > (timee - start).total_seconds():
+
+                while (time_sleep+error >= (timee - start).total_seconds()) :
                     if started != False:
                         try:
                             tupleQueue = self.qIN.get()
                         except:
                             print("pid-" , self.pid , "error")
                         frame = tupleQueue[0]
+
                         timee = tupleQueue[1]
 
                     pass
-                # print(timee.second)
+
                 pass
 
+
             croped_frame = frame[self.loc[1] - 50:self.loc[1] + 50 , self.loc[0] - 50:self.loc[0] + 50]
-            cv2.imshow("cropped" , croped_frame)
+            # cv2.imshow("cropped" , croped_frame)
+
             if cv2.waitKey(1) == 27:
                 break  # esc to quit
             # cv2.waitKey(0)
@@ -102,13 +120,21 @@ class POI(Process):  ####################################new point of interest
             maxLoc , maxVal = getFlashValue(croped_frame)
 
             if maxVal != 0:
-                self.maxl = maxLoc
-                message = message + "1"
-                print("1" , end='')
-                started = True
-                lastDigits[digitscount] = 1
-                digitscount = (digitscount + 1) % 10
-                start = timee
+                if firstdigit==False:
+                    firstdigit=True
+                    started = True
+                    # error=0.1
+                    self.maxl = maxLoc
+
+                    start = timee
+                else:
+                    self.maxl = maxLoc
+                    message = message + "1"
+                    print("1" , end='')
+                    # started = True
+                    lastDigits[digitscount] = 1
+                    digitscount = (digitscount + 1) % 10
+                    start = timee
             else:
                 self.maxl = (50 , 50)
                 if started == True:
@@ -118,19 +144,60 @@ class POI(Process):  ####################################new point of interest
                     digitscount = (digitscount + 1) % 10
                     start = timee
             self.tracking()
-            if(sum(lastDigits)/len(lastDigits)==0):
-                print(message)
-                # print(EncoderDecoder.binary_toText(message))
-                self.kill_process()
+            if len(message)==8:
+                if(message=='01111111'):
+                    EOF=True
+                    self.EOF=True
+                    break
+                else:
+                    char = EncoderDecoder.binary_toText(message)
+                    print(char)
+                    final_message=final_message+char
+                    message=''
+                    countofchar=countofchar+1
+                pass
+            if countofchar==packagesize:
+
+                break
+            if(EOF==True):
+                print()
+                print(final_message)
+
             # cv2.circle(frame , maxLoc , 50 , (0 , 0 , 255) , 2 , cv2.LINE_AA)
             # cv2.imshow('flash' , frame)
             if cv2.waitKey(1) == 27:
                 break  # esc to quit
-        pass
+
+        return final_message
+
+
+    def get_some_shit_out(self,sec):
+        maxVal=1
+        print("empty")
+        while (maxVal!=0):
+            try:
+                tupleQueue = self.qIN.get()
+            except:
+                print("pid-" , self.pid , "error")
+
+            frame = tupleQueue[0]
+            timee = tupleQueue[1]
+            # print(timee)
+            croped_frame = frame[self.loc[1] - 50:self.loc[1] + 50 , self.loc[0] - 50:self.loc[0] + 50]
+            # cv2.imshow("cropped" , croped_frame) #little window
+            if cv2.waitKey(1) == 27:
+                break  # esc to quit
+            # cv2.waitKey(0)
+
+            maxLoc , maxVal = getFlashValue(croped_frame)
+
+
+            pass
+
 
     def get_first_signal(self):
 
-        _,_,onExpected,offExpected,expectedError,_=getAllValues()
+        _,_,onExpected,offExpected,expectedError,_,_=getAllValues()
 
         lowBoundON = onExpected - expectedError
         lowBoundOFF = offExpected - expectedError
@@ -151,14 +218,22 @@ class POI(Process):  ####################################new point of interest
         offIndex = 0
 
         signal_etablished = False
+        flag=50
+        # flag_check=False
+        final_mess = ""
         while True:
             avgON = sum(self.signalOn) / len(self.signalOn)
             avgOFF = sum(self.signalOff) / len(self.signalOff)
 
             if avgON < highBoundON and avgON > lowBoundON and avgOFF < highBoundOFF and avgOFF > lowBoundOFF:
-                if signal_etablished == False:
+                flag=flag-1
+                # print(flag)
+                if (signal_etablished == False) and (flag<=0):
+                    print("enter flag",flag)
                     print("pid-" , self.pid , "good signal")
                     print("pid-" , self.pid , "onAVG-" , avgON , "offAVG-" , avgOFF)
+                    # print(onArr)
+                    # print(offArr)
                     self.qOUT.put(("true" , self.loc))
                     # self.get_message()
                     signal_etablished = True
@@ -169,18 +244,23 @@ class POI(Process):  ####################################new point of interest
             else:
                 if signal_etablished == True:
                     print("pid-" , self.pid , "first signal lost")
-                    # print("pid-" , self.pid , "onAVG-" , avgON , "offAVG-
-
-                    self.get_message()
+                    print("pid-" , self.pid , "onAVG-" , avgON , "offAVG-" , avgOFF)
+                    self.time_of_message = time.time();
+                    while(self.EOF==False):
+                        final_mess= final_mess+ self.get_message()
+                        self.get_some_shit_out(0.5)
+                        print(final_mess)
                     signal_etablished = False
+                    self.kill_process()
                 pass
 
             if self.loc[0] < 50 or self.loc[1] < 50 or self.loc[0] > 610 or self.loc[1] > 475:
                 print("pid-" , self.pid , "size")
-                self.qIN.close()
-                self.qOUT.close()
-                self.qIN.join_thread()
-                self.qOUT.join_thread()
+                # self.qIN.close()
+                # self.qOUT.close()
+                # self.qIN.join_thread()
+                # self.qOUT.join_thread()
+                self.kill_process()
 
                 break
 
@@ -192,7 +272,7 @@ class POI(Process):  ####################################new point of interest
             timee = tupleQueue[1]
             # print(timee)
             croped_frame = frame[self.loc[1] - 50:self.loc[1] + 50 , self.loc[0] - 50:self.loc[0] + 50]
-            cv2.imshow("cropped" , croped_frame)
+            # cv2.imshow("cropped" , croped_frame) #little window
             if cv2.waitKey(1) == 27:
                 break  # esc to quit
             # cv2.waitKey(0)
@@ -205,6 +285,7 @@ class POI(Process):  ####################################new point of interest
 
                 onBool = True
                 if offBool == True:
+
                     start_on = timee
                     end_off = timee
                     timeoff = round((end_off - start_off).total_seconds() , 3)
@@ -212,6 +293,7 @@ class POI(Process):  ####################################new point of interest
                     offIndex = (offIndex + 1) % 10
                     # print("end-off" , timeoff)
                     offArr.append(timeoff)
+
                     if offMinmax[0] > timeoff:
                         offMinmax[0] = timeoff
                     if offMinmax[1] < timeoff and timeoff < 100:
@@ -310,7 +392,7 @@ def show_webcam(mirror=False):
 
     # queue.
 
-    authorizedThreads, lifetime_of_thread,_,_,_,_= getAllValues()
+    authorizedThreads, lifetime_of_thread,_,_,_,_,_= getAllValues()
 
     processCount = 1
 
