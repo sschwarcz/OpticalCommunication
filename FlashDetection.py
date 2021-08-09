@@ -16,14 +16,15 @@ def getAllValues():
     authorizedThreads = 1
     lifetime_of_thread = 10
 
-    # onExpected_first_signal = 0.1292
-    # offExpected_first_signal = 0.0697
-    onExpected_first_signal = 0.1277
-    offExpected_first_signal =  0.072
+    onExpected_first_signal = 0.1139
+    offExpected_first_signal = 0.0511
+
+    # onExpected_first_signal = 0.1277 #good one
+    # offExpected_first_signal =  0.072
     expectedError_first_signal = 0.03
 
-    time_for_frame_message = 0.3
-    package_size=1
+    time_for_frame_message = 0.2
+    package_size=5
 
     return authorizedThreads,lifetime_of_thread ,onExpected_first_signal,offExpected_first_signal ,expectedError_first_signal,time_for_frame_message,package_size
 
@@ -70,10 +71,8 @@ class POI(Process):  ####################################new point of interest
         message = ""
         started = False
         firstdigit=False
-        EOF=False
         countofchar=0
-        lastDigits=[1]*10
-        digitscount=0
+        digitscount=1
         print("pid-" , self.pid , "waiting for message")
         # print("1010000100110111101100001011110100010000001101001011100110010000001110100011010000110010100100000011010110110100101101110011001110010000110000000000")
         start = datetime.now()
@@ -90,22 +89,22 @@ class POI(Process):  ####################################new point of interest
                     print("pid-" , self.pid , "error")
 
                 frame = tupleQueue[0]
-
                 timee = tupleQueue[1]
+
                 if (time.time()-timeEOF>6):
                     self.EOF = True
                     break
 
             else:
 
-                while (time_sleep+error >= (timee - start).total_seconds()) :
+                while (time_sleep*digitscount >= (timee - start).total_seconds()) :
                     if started != False:
                         try:
                             tupleQueue = self.qIN.get()
                         except:
                             print("pid-" , self.pid , "error")
-                        frame = tupleQueue[0]
 
+                        frame = tupleQueue[0]
                         timee = tupleQueue[1]
 
                     pass
@@ -136,16 +135,16 @@ class POI(Process):  ####################################new point of interest
                     print("1" , end='')
                     # started = True
                     # lastDigits[digitscount] = 1
-                    # digitscount = (digitscount + 1) % 10
-                    start = timee
+                    digitscount = digitscount + 1
+                    # start = timee
             else:
                 self.maxl = (50 , 50)
                 if started == True:
                     message = message + "0"
                     print("0" , end='')
                     # lastDigits[digitscount] = 0
-                    # digitscount = (digitscount + 1) % 10
-                    start = timee
+                    digitscount = digitscount + 1
+                    # start = timee
             self.tracking()
             if len(message)==8:
                 if(message=='01111111'):
@@ -200,6 +199,7 @@ class POI(Process):  ####################################new point of interest
     def get_first_signal(self):
 
         _,_,onExpected,offExpected,expectedError,_,_=getAllValues()
+        time_between_firstSignal_and_message=1
 
         lowBoundON = onExpected - expectedError
         lowBoundOFF = offExpected - expectedError
@@ -225,7 +225,7 @@ class POI(Process):  ####################################new point of interest
         while True:
             avgON = sum(self.signalOn) / len(self.signalOn)
             avgOFF = sum(self.signalOff) / len(self.signalOff)
-
+            # print(self.signalOn)
             if avgON < highBoundON and avgON > lowBoundON and avgOFF < highBoundOFF and avgOFF > lowBoundOFF:
                 flag=flag-1
                 # print(flag)
@@ -324,7 +324,7 @@ class POI(Process):  ####################################new point of interest
                         onMinmax[1] = timeon
                     onBool = False
 
-                if (timee - start_off).total_seconds() > 3 or (timee - start_on).total_seconds() > 4:
+                if (timee - start_off).total_seconds() > time_between_firstSignal_and_message or (timee - start_on).total_seconds() > 4:
                     self.signalOff[offIndex] = 0
                     offIndex = (offIndex + 1) % 10
                     self.signalOn[onIndex] = 0
